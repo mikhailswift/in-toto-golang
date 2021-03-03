@@ -39,6 +39,7 @@ const (
 	ed25519KeyType        string = "ed25519"
 	rsassapsssha256Scheme string = "rsassa-pss-sha256"
 	ecdsaSha2nistp224     string = "ecdsa-sha2-nistp224"
+	ecdsaSha2nistp256     string = "ecdsa-sha2-nistp256"
 	ecdsaSha2nistp384     string = "ecdsa-sha2-nistp384"
 	ecdsaSha2nistp521     string = "ecdsa-sha2-nistp521"
 	ed25519Scheme         string = "ed25519"
@@ -71,7 +72,7 @@ We need to use this function instead of a constant because Go does not support
 global constant slices.
 */
 func getSupportedEcdsaSchemes() []string {
-	return []string{ecdsaSha2nistp224, ecdsaSha2nistp384, ecdsaSha2nistp521}
+	return []string{ecdsaSha2nistp224, ecdsaSha2nistp256, ecdsaSha2nistp384, ecdsaSha2nistp521}
 }
 
 /*
@@ -365,7 +366,7 @@ func getDefaultKeyScheme(key interface{}) (scheme string, keyIDHashAlgorithms []
 	case *ed25519.PrivateKey, *ed25519.PublicKey:
 		scheme = ed25519Scheme
 	case *ecdsa.PrivateKey, *ecdsa.PublicKey:
-		scheme = ecdsaSha2nistp224
+		scheme = ecdsaSha2nistp256
 	case *x509.Certificate:
 		return getDefaultKeyScheme(key.(*x509.Certificate).PublicKey)
 	default:
@@ -499,9 +500,9 @@ func GenerateSignature(signable []byte, key Key) (Signature, error) {
 		}
 		curveSize := parsedKey.(*ecdsa.PrivateKey).Curve.Params().BitSize
 		var hashed []byte
-		// if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
-		//   return Signature{}, ErrCurveSizeSchemeMismatch
-		// }
+		if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
+			return Signature{}, ErrCurveSizeSchemeMismatch
+		}
 		// implement https://tools.ietf.org/html/rfc5656#section-6.2.1
 		// We determine the curve size and choose the correct hashing
 		// method based on the curveSize
@@ -605,9 +606,9 @@ func VerifySignature(key Key, sig Signature, unverified []byte) error {
 		}
 		curveSize := parsedKey.(*ecdsa.PublicKey).Curve.Params().BitSize
 		var hashed []byte
-		//if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
-		//	return ErrCurveSizeSchemeMismatch
-		//}
+		if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
+			return ErrCurveSizeSchemeMismatch
+		}
 		// implement https://tools.ietf.org/html/rfc5656#section-6.2.1
 		// We determine the curve size and choose the correct hashing
 		// method based on the curveSize
