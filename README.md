@@ -181,7 +181,7 @@ Currently only URIs and common name constraints supported
 
 The CA for the signing keys must be included in the layout.  See example
 
-## Example LAyout
+## Example Layout
 ```
 {
  "signatures": [
