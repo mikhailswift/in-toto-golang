@@ -1,6 +1,7 @@
 package in_toto
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"log"
@@ -33,17 +34,11 @@ func GetSVID(ctx context.Context, socketPath string) Key {
 		log.Fatalf("Error marshaling certificate: %v", err)
 	}
 
-	k.KeyVal.Private = string(keyBytes)
-	k.KeyVal.Public = string(svid)
-	k.KeyVal.Certificate = string(svid)
-	k.Scheme = ecdsaSha2nistp384
-	k.KeyType = ecdsaKeyType //this should be known from the ASN.1 data
-	k.KeyIDHashAlgorithms = []string{"sha256", "sha512"}
-	err = k.generateKeyID()
-	if err != nil {
-		log.Fatalf("Error generating keyID: %v", err)
+	if err := k.LoadKeyReaderDefaults(bytes.NewReader(keyBytes)); err != nil {
+		log.Fatalf("Error configuring key: %v", err)
 	}
 
+	k.KeyVal.Certificate = string(svid)
 	return k
 }
 
