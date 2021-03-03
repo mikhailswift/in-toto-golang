@@ -44,7 +44,7 @@ const (
 	ed25519Scheme         string = "ed25519"
 	pemPublicKey          string = "PUBLIC KEY"
 	pemPrivateKey         string = "PRIVATE KEY"
-	pemRSAPrivateKey      string = "PRIVATE RSA KEY"
+	pemRSAPrivateKey      string = "RSA PRIVATE KEY"
 )
 
 /*
@@ -143,6 +143,7 @@ implementation and the securesystemslib.
 */
 func (k *Key) setKeyComponents(pubKeyBytes []byte, privateKeyBytes []byte, keyType string, scheme string, KeyIDHashAlgorithms []string) error {
 	// assume we have a privateKey if the key size is bigger than 0
+
 	switch keyType {
 	case rsaKeyType:
 		if len(privateKeyBytes) > 0 {
@@ -217,6 +218,10 @@ func parseKey(data []byte) (interface{}, error) {
 	if err == nil {
 		return key, nil
 	}
+	key, err = x509.ParseECPrivateKey(data)
+	if err == nil {
+		return key, nil
+	}
 	return nil, ErrFailedPEMParsing
 }
 
@@ -237,6 +242,7 @@ func decodeAndParse(pemBytes []byte) (*pem.Block, interface{}, error) {
 	if data == nil {
 		return nil, nil, ErrNoPEMBlock
 	}
+
 	// Try to load private key, if this fails try to load
 	// key as public key
 	key, err := parseKey(data.Bytes)
@@ -293,6 +299,19 @@ func (k *Key) LoadKey(path string, scheme string, KeyIDHashAlgorithms []string) 
 	return k.LoadKeyReader(pemFile, scheme, KeyIDHashAlgorithms)
 }
 
+func (k *Key) LoadKeyDefaults(path string) error {
+	pemFile, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := pemFile.Close(); closeErr != nil {
+			err = closeErr
+		}
+	}()
+	return k.LoadKeyReaderDefaults(pemFile)
+}
+
 // LoadKeyReader loads the key from a supplied reader. The logic matches LoadKey otherwise.
 func (k *Key) LoadKeyReader(r io.Reader, scheme string, KeyIDHashAlgorithms []string) error {
 	if r == nil {
@@ -313,7 +332,51 @@ func (k *Key) LoadKeyReader(r io.Reader, scheme string, KeyIDHashAlgorithms []st
 	return k.loadKey(key, pemData, scheme, KeyIDHashAlgorithms)
 }
 
+func (k *Key) LoadKeyReaderDefaults(r io.Reader) error {
+	if r == nil {
+		return ErrNoPEMBlock
+	}
+	// Read key bytes
+	pemBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	// decodeAndParse returns the pemData for later use
+	// and a parsed key object (for operations on that key, like extracting the public Key)
+	pemData, key, err := decodeAndParse(pemBytes)
+	if err != nil {
+		return err
+	}
+
+	scheme, keyIDHashAlgorithms, err := getDefaultKeyScheme(key)
+	if err != nil {
+		return err
+	}
+
+	return k.loadKey(key, pemData, scheme, keyIDHashAlgorithms)
+}
+
+func getDefaultKeyScheme(key interface{}) (scheme string, keyIDHashAlgorithms []string, err error) {
+	keyIDHashAlgorithms = []string{"sha256", "sha512"}
+
+	switch key.(type) {
+	case *rsa.PublicKey, *rsa.PrivateKey:
+		scheme = rsassapsssha256Scheme
+	case *ed25519.PrivateKey, *ed25519.PublicKey:
+		scheme = ed25519Scheme
+	case *ecdsa.PrivateKey, *ecdsa.PublicKey:
+		scheme = ecdsaSha2nistp224
+	case *x509.Certificate:
+		return getDefaultKeyScheme(key.(*x509.Certificate).PublicKey)
+	default:
+		err = ErrUnsupportedKeyType
+	}
+
+	return scheme, keyIDHashAlgorithms, err
+}
+
 func (k *Key) loadKey(key interface{}, pemData *pem.Block, scheme string, keyIDHashAlgorithms []string) error {
+
 	switch key.(type) {
 	case *rsa.PublicKey:
 		pubKeyBytes, err := x509.MarshalPKIXPublicKey(key.(*rsa.PublicKey))
@@ -436,9 +499,9 @@ func GenerateSignature(signable []byte, key Key) (Signature, error) {
 		}
 		curveSize := parsedKey.(*ecdsa.PrivateKey).Curve.Params().BitSize
 		var hashed []byte
-		if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
-			return Signature{}, ErrCurveSizeSchemeMismatch
-		}
+		// if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
+		//   return Signature{}, ErrCurveSizeSchemeMismatch
+		// }
 		// implement https://tools.ietf.org/html/rfc5656#section-6.2.1
 		// We determine the curve size and choose the correct hashing
 		// method based on the curveSize
@@ -542,9 +605,9 @@ func VerifySignature(key Key, sig Signature, unverified []byte) error {
 		}
 		curveSize := parsedKey.(*ecdsa.PublicKey).Curve.Params().BitSize
 		var hashed []byte
-		if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
-			return ErrCurveSizeSchemeMismatch
-		}
+		//if err := matchEcdsaScheme(curveSize, key.Scheme); err != nil {
+		//	return ErrCurveSizeSchemeMismatch
+		//}
 		// implement https://tools.ietf.org/html/rfc5656#section-6.2.1
 		// We determine the curve size and choose the correct hashing
 		// method based on the curveSize
@@ -558,7 +621,7 @@ func VerifySignature(key Key, sig Signature, unverified []byte) error {
 		default:
 			panic("unexpected Error in VerifySignature function")
 		}
-		if ok := ecdsa.VerifyASN1(parsedKey.(*ecdsa.PublicKey), hashed, sigBytes); !ok {
+		if ok := ecdsa.VerifyASN1(parsedKey.(*ecdsa.PublicKey), hashed[:], sigBytes); !ok {
 			return ErrInvalidSignature
 		}
 	case ed25519KeyType:
@@ -576,5 +639,28 @@ func VerifySignature(key Key, sig Signature, unverified []byte) error {
 		// line of the function.
 		panic("unexpected Error in VerifySignature function")
 	}
+	return nil
+}
+
+/*
+VerifyCertificateTrust verifies that the certificate has a chain of trust
+to a root in rootCertPool, possibly using any intermediates in
+intermediateCertPool */
+func VerifyCertificateTrust(key Key, rootCertPool, intermediateCertPool *x509.CertPool) error {
+	_, possibleCert, err := decodeAndParse([]byte(key.KeyVal.Certificate))
+	if err != nil {
+		return err
+	}
+
+	cert, ok := possibleCert.(*x509.Certificate)
+	if !ok {
+		return ErrInvalidKey
+	}
+
+	chains, err := cert.Verify(x509.VerifyOptions{Roots: rootCertPool, Intermediates: intermediateCertPool})
+	if len(chains) == 0 || err != nil {
+		return errors.New("Could not verify cert for key")
+	}
+
 	return nil
 }

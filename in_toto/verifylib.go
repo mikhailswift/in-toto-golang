@@ -40,7 +40,7 @@ func RunInspections(layout Layout) (map[string]Metablock, error) {
 	for _, inspection := range layout.Inspect {
 
 		linkMb, err := InTotoRun(inspection.Name, []string{"."}, []string{"."},
-			inspection.Run, Key{}, []string{"sha256"}, nil)
+			inspection.Run, Key{}, []string{"sha256"}, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -521,7 +521,7 @@ func VerifyLinkSignatureThesholds(layout Layout,
 				}
 
 				// test against the root pool with the key's certificate if it has any
-				if err := linkMb.VerifySignatureWithCertificate(sig, cert, rootCertPool, intermediateCertPool); err == nil {
+				if err := VerifyCertificateTrust(cert, rootCertPool, intermediateCertPool); err == nil {
 					linksPerStepVerified[signerKeyID] = linkMb
 				}
 			}

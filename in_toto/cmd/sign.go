@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -25,15 +26,20 @@ var signCmd = &cobra.Command{
 		//Load Keys
 		var layoutKey intoto.Key
 
-		if err := layoutKey.LoadKey(keyPath, "rsassa-pss-sha256", []string{"sha256", "sha512"}); err != nil {
-			fmt.Println("Invalid Key Error:", err.Error())
-			os.Exit(1)
-		}
+		if spiffeUDS != "" {
+			ctx := context.Background()
+			layoutKey = intoto.GetSVID(ctx, spiffeUDS)
 
+		} else {
+
+			if err := layoutKey.LoadKeyDefaults(keyPath); err != nil {
+				fmt.Println("Invalid Key Error:", err.Error())
+				os.Exit(1)
+			}
+		}
 		//Sign
 		block.Sign(layoutKey)
 		block.Dump(outputPath)
-
 	},
 }
 
