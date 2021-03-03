@@ -179,5 +179,176 @@ Currently only URIs and common name constraints supported
 
 ## Certificate Authority
 
-The CA for the signing keys must be included in the layout.  See example.unsigned.layout 
+The CA for the signing keys must be included in the layout.  See example
+
+## Example LAyout
+```
+{
+ "signatures": [
+ ],
+ "signed": {
+  "_type": "layout",
+  "expires": "2021-04-03T00:00:00Z",
+  "inspect": [],
+  "intermediatecas": [],
+  "keys": {},
+  "readme": "",
+  "rootcas": ["-----BEGIN CERTIFICATE-----\nMIIBkTCCATegAwIBAgIBADAKBggqhkjOPQQDAjAdMQswCQYDVQQGEwJVUzEOMAwG\nA1UEChMFU1BJUkUwHhcNMjEwMzAzMTUwMjQzWhcNMjEwNDAyMTUwMjUzWjAdMQsw\nCQYDVQQGEwJVUzEOMAwGA1UEChMFU1BJUkUwWTATBgcqhkjOPQIBBggqhkjOPQMB\nBwNCAAQ3L4PJvxT4hflEMcEcsOuvyvnOkXCH+Z5gCtDW0j6EOIBSCnFvbCf60xdF\n3jfIbVV0OVCGPRQ7QwRd5kP8vM4Jo2gwZjAOBgNVHQ8BAf8EBAMCAYYwDwYDVR0T\nAQH/BAUwAwEB/zAdBgNVHQ4EFgQUhH+7do7BgZFg5oNTqTQhVmnfzG0wJAYDVR0R\nBB0wG4YZc3BpZmZlOi8vc3BpcmUuYm94Ym9hdC5pbzAKBggqhkjOPQQDAgNIADBF\nAiAsmHvUqQnni2OijlyCl/XONrY9C+PRjpZrVfYguBenTwIhAKsLAJHHn5MDJV+E\nYzx35oSRRRGTyM3yreDoB9G/JOPi\n-----END CERTIFICATE-----\n"],
+  "steps": [
+   {
+    "_type": "step",
+    "cert_constraints": [
+      {
+        "common_name": "*",
+        "uris": [
+          "spiffe://spire.boxboat.io/intoto-builder"
+        ]
+      }
+    ],
+    "expected_command": [
+     "git",
+     "clone",
+     "https://gitlab.com/boxboat/demos/intoto-spire/go-hello-world"
+    ],
+    "expected_materials": [
+     [
+      "DISALLOW",
+      "*"
+     ]
+    ],
+    "expected_products": [
+     [
+      "CREATE",
+      "*"
+     ]
+    ],
+    "name": "clone",
+    "pubkeys": [],
+    "threshold": 1
+   },
+   {
+    "_type": "step",
+    "cert_constraints": [
+      {
+        "common_name": "*",
+        "uris": [
+          "spiffe://spire.boxboat.io/intoto-builder"
+        ]
+      }
+    ],
+    "expected_command": [
+      "/bin/sh",
+      "-c",
+      "trivy --exit-code 0 --no-progress --output ./trivy-scanning-report.json --input ./go-hello-world.tar --format json"
+    ],
+    "expected_materials": [
+     [
+      "MATCH",
+      "*",
+      "WITH",
+      "PRODUCTS",
+      "FROM",
+      "build-image"
+     ]
+    ],
+    "expected_products": [
+     [
+      "CREATE",
+      "trivy-scanning-report.json"
+     ]
+    ],
+    "name": "scan-image",
+    "pubkeys": [],
+    "threshold": 1
+   },
+   {
+    "_type": "step",
+    "cert_constraints": [
+      {
+        "common_name": "*",
+        "uris": [
+          "spiffe://spire.boxboat.io/intoto-builder"
+        ]
+      }
+    ],
+    "expected_command": [
+     "go",
+     "build",
+     "./..."
+    ],
+    "expected_materials": [
+     [
+      "MATCH",
+      "*",
+      "WITH",
+      "PRODUCTS",
+      "FROM",
+      "clone"
+     ],
+     [
+      "DISALLOW",
+      "*"
+     ]
+    ],
+    "expected_products": [
+     [
+      "CREATE",
+      "go-hello-world"
+     ],
+     [
+      "DISALLOW",
+      "*"
+     ]
+    ],
+    "name": "build",
+    "pubkeys": [],
+    "threshold": 1
+   },
+   {
+    "_type": "step",
+    "cert_constraints": [
+      {
+        "common_name": "*",
+        "uris": [
+          "spiffe://spire.boxboat.io/intoto-builder"
+        ]
+      }
+    ],
+    "expected_command": ["/bin/sh", "-c", "docker", "build", ".", "-t", "registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world", "--iidfile", "image-id", "&&", "docker", "save", "--output", "go-hello-world.tar", "registry.gitlab.com/boxboat/demos/intoto-spire/go-hello-world"],
+    "expected_materials": [
+     [
+      "MATCH",
+      "*",
+      "WITH",
+      "PRODUCTS",
+      "FROM",
+      "clone"
+     ],
+     [
+      "DISALLOW",
+      "*"
+     ]
+    ],
+    "expected_products": [
+     [
+      "CREATE",
+      "image-id"
+     ],
+     [
+      "CREATE",
+      "go-hello-world.tar"
+     ],
+     [
+      "DISALLOW",
+      "*"
+     ]
+    ],
+    "name": "build-image",
+    "pubkeys": [],
+    "threshold": 1
+   }
+  ]
+ }
+}
+```
 
