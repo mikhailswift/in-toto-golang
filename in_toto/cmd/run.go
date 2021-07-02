@@ -11,6 +11,7 @@ import (
 )
 
 var stepName string
+var runDir string
 var keyPath string
 var certPath string
 var materialsPaths []string
@@ -53,7 +54,7 @@ with the passed key.  Returns nonzero value on failure and zero otherwise.`,
 			}
 		}
 
-		block, err := intoto.InTotoRun(stepName, materialsPaths, productsPaths, args, key, []string{"sha256"}, []string{}, lStripPaths)
+		block, err := intoto.InTotoRun(stepName, runDir, materialsPaths, productsPaths, args, key, []string{"sha256"}, []string{}, lStripPaths)
 		if err != nil {
 			fmt.Println("Error generating meta-block:", err.Error())
 			os.Exit(1)
@@ -76,6 +77,12 @@ func init() {
 		`Name used to associate the resulting link metadata
 with the corresponding step defined in an in-toto
 layout.`)
+	runCmd.Flags().StringVarP(&runDir,
+		"run-dir", "r", "",
+		`runDir specifies the working directory of the command.
+If runDir is the empty string, the command will run in the
+calling process's current directory. The runDir directory must
+exist, be writable, and not be a symlink.`)
 	runCmd.Flags().StringVarP(&keyPath,
 		"key", "k", "",
 		`Path to a PEM formatted private key file used to sign

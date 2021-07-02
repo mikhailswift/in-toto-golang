@@ -238,8 +238,13 @@ created the first return value is nil and the second return value is the error.
 NOTE: Since stdout and stderr are captured, they cannot be seen during the
 command execution.
 */
-func RunCommand(cmdArgs []string) (map[string]interface{}, error) {
+func RunCommand(cmdArgs []string, runDir string) (map[string]interface{}, error) {
+
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+
+	if runDir != "" {
+		cmd.Dir = runDir
+	}
 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
@@ -275,7 +280,7 @@ and materials at the passed materialPaths.  The returned link is wrapped in a
 Metablock object.  If command execution or artifact recording fails the first
 return value is an empty Metablock and the second return value is the error.
 */
-func InTotoRun(name string, materialPaths []string, productPaths []string,
+func InTotoRun(name string, runDir string, materialPaths []string, productPaths []string,
 	cmdArgs []string, key Key, hashAlgorithms []string, gitignorePatterns []string,
 	lStripPaths []string) (Metablock, error) {
 	var linkMb Metablock
@@ -286,7 +291,7 @@ func InTotoRun(name string, materialPaths []string, productPaths []string,
 		return linkMb, err
 	}
 
-	byProducts, err := RunCommand(cmdArgs)
+	byProducts, err := RunCommand(cmdArgs, runDir)
 	if err != nil {
 		fmt.Println(err)
 		return linkMb, err
