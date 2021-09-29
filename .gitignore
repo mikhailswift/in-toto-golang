@@ -1,0 +1,5 @@
+bin/
+test/tmp
+certs/*.pem
+certs/*.srl
+certs/*.cnf

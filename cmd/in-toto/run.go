@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	"github.com/in-toto/in-toto-golang/pkg/spiffe"
 	"github.com/spf13/cobra"
 )
 
@@ -121,10 +124,54 @@ of another.`,
 in environment variables or config files. See Config docs for details.`,
 	)
 
+	runCmd.Flags().StringVar(
+		&spireSocketPath,
+		"spiffe-workload-api-path",
+		"",
+		"uds path for spiffe workload api",
+	)
+
 	runCmd.MarkFlagRequired("name")
 }
 
-func runPreRun(cmd *cobra.Command, args []string) error {
+func loadKeyFromSpireSocket() error {
+	ctx := context.Background()
+	var err error
+	spireClient, err := spiffe.NewClient(ctx, spireSocketPath)
+	if err != nil {
+		return fmt.Errorf("failed to create spire client: %w", err)
+	}
+
+	svidDetails, err := spiffe.GetSVID(ctx, spireClient)
+	if err != nil {
+		return fmt.Errorf("failed to get spiffe x.509 SVID: %w", err)
+	}
+
+	key, err = svidDetails.ToIntotoKey()
+	if err != nil {
+		return fmt.Errorf("failed to convert svid to in-toto key: %w", err)
+	}
+
+	// Write out any intermediates necessary to build the trust back
+	// to the root for use during verification.
+	for i, c := range svidDetails.Intermediates {
+		certFileName := fmt.Sprintf("%v-intermediate-%v.cert.pem", stepName, i)
+		certFile := filepath.Join(outDir, certFileName)
+		certOut, err := os.Create(certFile)
+		if err != nil {
+			return fmt.Errorf("failed to write spiffe intermediate cert to %s: %w", certFile, err)
+		}
+
+		defer certOut.Close()
+		if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: c.Raw}); err != nil {
+			return fmt.Errorf("failed to encode spiffe intermediate cert: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func loadKeyFromDisk() error {
 	key = intoto.Key{}
 	cert = intoto.Key{}
 
@@ -153,6 +200,15 @@ func runPreRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+
+}
+
+func runPreRun(cmd *cobra.Command, args []string) error {
+	if spireSocketPath != "" {
+		return loadKeyFromSpireSocket()
+	}
+
+	return loadKeyFromDisk()
 }
 
 func run(cmd *cobra.Command, args []string) error {
